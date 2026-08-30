@@ -1,10 +1,19 @@
 // ─────────────────────────────────────────────────────────────────────────
-// CU Scroll Animation + Announcement Bar — single file
+// CU Scroll Animation + Announcement Bar
 //
 // Paste this whole file into a new Framer code component.
-// Self-contained: the announcement bar is folded in, so there is no second
-// file to create and no import to resolve.
+// Self-contained — one component, no imports to resolve, nothing else to add.
 // ─────────────────────────────────────────────────────────────────────────
+
+// CU Scroll Animation + Announcement Bar — Framer Code Component
+//
+// One component, one file. The announcement bar (Figma node 219:477) is
+// folded in rather than imported, so this pastes into Framer as-is.
+//
+// The bar's own controls are spread into this component's panel, so
+// everything is editable from one place: 1–6 announcements with per-item
+// CTA copy/link, arrows, auto-rotate, the Figma Glass parameters, and the
+// scroll-linked exit across frames 90–110.
 
 import { addPropertyControls, ControlType } from "framer"
 import {
@@ -19,25 +28,15 @@ import {
 } from "react"
 
 // ══ Announcement bar ══════════════════════════════════════════════════
-// CU Announcement Bar — Framer Code Component
 //
-// Implements Figma node 219:477 (Chandigarh University Website New).
-// Exact geometry from the design (bar 684x53 at the reference copy length):
+// Figma node 219:477 (Chandigarh University Website New). Exact geometry
+// from the design — bar 684x53 at the reference copy length, laid out as
 //   8 pad | 32 arrow | 16 | copy | 16 | CTA | 4 | 32 arrow | 8 pad
-//   row height 37, corner radius 30, CTA #ff3b4d, copy 18px @ 90% white.
+// with row height 37, radius 30, CTA #ff3b4d, copy 18px at 90% white.
 //
-// Everything an editor needs is a property control — no code edits required:
-//   • 1–6 announcements, each with its own CTA toggle / copy / link
-//   • prev+next arrows (auto-hidden at a single announcement), PNG-uploadable
-//   • auto-rotate interval (2s default)
-//   • max bar width (1200px default); copy marquees when it would overflow
-//
-// Exports:
-//   default AnnouncementBar        — standalone Framer component
-//   AnnouncementBarView            — inner view, accepts a ref (see handle)
-//   AnnouncementBarHandle          — imperative { setHideProgress(0..1) }
-//   announcementBarControls        — property controls, spreadable into a host
-
+// AnnouncementBarView is exported only for the local preview harnesses.
+// The paste-file generator strips that keyword so Framer lists exactly one
+// component; everything else here stays internal.
 
 // ── Design constants (from Figma metadata) ──
 const MAX_ANNOUNCEMENTS = 6
@@ -64,7 +63,7 @@ const FONT_STACK = "'Google Sans', 'Inter', sans-serif"
 
 const clamp = (v: number, min = 0, max = 1) => Math.max(min, Math.min(max, v))
 
-interface Announcement {
+export interface Announcement {
     text: string
     highlight: string
     showCTA: boolean
@@ -72,7 +71,7 @@ interface Announcement {
     ctaLink: string
 }
 
-interface AnnouncementBarProps {
+export interface AnnouncementBarProps {
     announcements?: Announcement[]
     autoRotate?: boolean
     rotateInterval?: number
@@ -106,7 +105,7 @@ interface AnnouncementBarProps {
 }
 
 /** Imperative handle so a scroll-driven host can hide the bar without re-rendering it. */
-interface AnnouncementBarHandle {
+export interface AnnouncementBarHandle {
     /** 0 = fully visible, 1 = scaled down and moved off the top of the screen. */
     setHideProgress: (p: number) => void
 }
