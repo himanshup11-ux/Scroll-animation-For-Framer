@@ -16,12 +16,24 @@
 
 import { addPropertyControls, ControlType } from "framer"
 import { useRef, useEffect, useCallback } from "react"
+import {
+    AnnouncementBarView,
+    announcementBarControls,
+    type AnnouncementBarHandle,
+    type AnnouncementBarProps,
+} from "./AnnouncementBar"
 
 // ─── CHANGE THIS TO YOUR CDN URL ───
 const BASE_URL = "https://himanshup11-ux.github.io/Scroll-animation-frames"
 // ────────────────────────────────────
 
 const TOTAL_FRAMES = 195
+
+// Frame at which the rankings "Top Text Image" starts to appear.
+const TOP_TEXT_FRAME = 110
+// The announcement bar starts leaving this many frames earlier, so it has
+// fully cleared the screen by the time the top text image shows up.
+const BAR_HIDE_LEAD = 20
 
 function getFramePath(index: number, baseUrl: string): string {
     const padded = String(index).padStart(3, "0")
@@ -40,7 +52,7 @@ function staggerProgress(progress: number, i: number, total: number): number {
     return clamp((progress - start) / (end - start))
 }
 
-interface Props {
+interface Props extends AnnouncementBarProps {
     badgesImg: string
     topTextImg: string
     card1Img: string
@@ -49,6 +61,9 @@ interface Props {
     cdnBaseUrl?: string
     scrollLength?: number
     fitMode?: "cover" | "contain"
+    showAnnouncementBar?: boolean
+    announcementBarTop?: number
+    announcementBarInset?: number
     style?: React.CSSProperties
 }
 
@@ -67,9 +82,14 @@ export default function CUScrollAnimation({
     cdnBaseUrl = BASE_URL,
     scrollLength = 600,
     fitMode = "cover",
+    showAnnouncementBar = true,
+    announcementBarTop = 40,
+    announcementBarInset = 24,
     style,
+    ...announcementProps
 }: Props) {
     const containerRef = useRef<HTMLDivElement>(null)
+    const announcementBarRef = useRef<AnnouncementBarHandle>(null)
     const stageRef = useRef<HTMLDivElement>(null)
     const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -239,6 +259,12 @@ export default function CUScrollAnimation({
         }
 
         const applyOverlays = (f: number) => {
+            // Announcement bar: scales down and slides off the top of the
+            // screen over the 20 frames before the top text image appears.
+            announcementBarRef.current?.setHideProgress(
+                clamp((f - (TOP_TEXT_FRAME - BAR_HIDE_LEAD)) / BAR_HIDE_LEAD)
+            )
+
             // Hero overlay: fades out over frames 1-30
             const progress = clamp((f - 1) / 30)
 
@@ -303,7 +329,7 @@ export default function CUScrollAnimation({
             const c3 = card3Ref.current
             if (!ro) return
 
-            const introP = clamp((f - 110) / 30)
+            const introP = clamp((f - TOP_TEXT_FRAME) / 30)
             if (ti) {
                 ti.style.opacity = String(introP)
                 ti.style.transform = `translateY(${(1 - introP) * 12}px)`
@@ -705,6 +731,29 @@ export default function CUScrollAnimation({
                         ))}
                     </div>
                 </div>
+
+                {/* Announcement Bar — pinned inside the sticky stage, so it
+                    holds its place on screen while the frames scrub past. */}
+                {showAnnouncementBar ? (
+                    <div
+                        style={{
+                            position: "absolute",
+                            top: announcementBarTop,
+                            left: announcementBarInset,
+                            right: announcementBarInset,
+                            zIndex: 13,
+                            display: "flex",
+                            justifyContent: "center",
+                            pointerEvents: "none",
+                        }}
+                    >
+                        <AnnouncementBarView
+                            ref={announcementBarRef}
+                            {...announcementProps}
+                            style={{ pointerEvents: "auto" }}
+                        />
+                    </div>
+                ) : null}
             </div>
         </div>
     )
@@ -740,4 +789,33 @@ addPropertyControls(CUScrollAnimation, {
     card1Img: { type: ControlType.Image, title: "Card 1 (Left)" },
     card2Img: { type: ControlType.Image, title: "Card 2 (Center)" },
     card3Img: { type: ControlType.Image, title: "Card 3 (Right)" },
+
+    showAnnouncementBar: {
+        type: ControlType.Boolean,
+        title: "Announcement Bar",
+        defaultValue: true,
+        enabledTitle: "Show",
+        disabledTitle: "Hide",
+    },
+    announcementBarTop: {
+        type: ControlType.Number,
+        title: "Bar Top",
+        defaultValue: 40,
+        min: 0,
+        max: 240,
+        step: 4,
+        unit: "px",
+        hidden: (p: Props) => !p.showAnnouncementBar,
+    },
+    announcementBarInset: {
+        type: ControlType.Number,
+        title: "Bar Side Inset",
+        defaultValue: 24,
+        min: 0,
+        max: 160,
+        step: 4,
+        unit: "px",
+        hidden: (p: Props) => !p.showAnnouncementBar,
+    },
+    ...announcementBarControls,
 })
