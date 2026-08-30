@@ -74,6 +74,18 @@ export interface AnnouncementBarProps {
     arrowColor?: string
     backgroundImg?: string
     barMaxWidth?: number
+    glass?: boolean
+    lightAngle?: number
+    lightIntensity?: number
+    refraction?: number
+    depth?: number
+    dispersion?: number
+    frost?: number
+    splay?: number
+    tintFrom?: string
+    tintTo?: string
+    tintAngle?: number
+    tintOpacity?: number
     copyColor?: string
     highlightColor?: string
     ctaColor?: string
@@ -98,6 +110,103 @@ const DEFAULT_ANNOUNCEMENTS: Announcement[] = [
         ctaLink: "",
     },
 ]
+
+/**
+ * Approximates Figma's Glass material in CSS, using the same parameter names
+ * and 0–100 ranges as the Figma panel so the numbers carry across.
+ *
+ * CSS has no true refraction, so this is a layered stand-in rather than a
+ * port: backdrop blur/saturation for the medium, an inset rim lit from
+ * `lightAngle` for depth, tinted inset fringes for dispersion, and a
+ * specular sheen band across the light axis.
+ */
+function buildGlass(o: {
+    lightAngle: number
+    lightIntensity: number
+    refraction: number
+    depth: number
+    dispersion: number
+    frost: number
+    splay: number
+    tintFrom: string
+    tintTo: string
+    tintAngle: number
+    tintOpacity: number
+}) {
+    const rad = (o.lightAngle * Math.PI) / 180
+    // Vector pointing at the light. -45° lands top-left, matching the widget.
+    const hx = -Math.cos(rad)
+    const hy = Math.sin(rad)
+
+    const lit = (o.lightIntensity / 100) * 0.6
+    const rimBlur = o.depth * 0.16 + 2
+    const rimOffset = o.depth * 0.05 + 1
+    const spread = o.splay * 0.035
+    const fringe = o.dispersion / 420
+    const fringeBlur = o.dispersion * 0.1 + 1
+
+    // Frost drives the blur; refraction adds a touch of its own plus saturation.
+    const blur = o.frost * 0.22 + o.refraction * 0.035
+    const saturate = 1 + o.refraction / 110
+    const brightness = 1 + o.refraction / 900
+    const backdrop = `blur(${blur.toFixed(2)}px) saturate(${saturate.toFixed(
+        2
+    )}) brightness(${brightness.toFixed(3)})`
+
+    // CSS gradient angle for a screen-space vector (0deg = up, clockwise).
+    const sheenAngle = (Math.atan2(-hx, hy) * 180) / Math.PI
+
+    const boxShadow = [
+        `0 ${8 + o.depth * 0.08}px ${
+            24 + o.depth * 0.3
+        }px rgba(0,0,0,${0.18 + o.depth / 900})`,
+        // Lit rim on the light side, shaded rim opposite — this is "depth".
+        `inset ${(hx * rimOffset).toFixed(2)}px ${(
+            hy * rimOffset
+        ).toFixed(2)}px ${rimBlur.toFixed(2)}px ${(-spread).toFixed(
+            2
+        )}px rgba(255,255,255,${lit.toFixed(3)})`,
+        `inset ${(-hx * rimOffset).toFixed(2)}px ${(
+            -hy * rimOffset
+        ).toFixed(2)}px ${rimBlur.toFixed(2)}px ${(-spread).toFixed(
+            2
+        )}px rgba(0,0,0,${(0.12 + o.depth / 640).toFixed(3)})`,
+        // Chromatic split across the light axis — "dispersion".
+        `inset ${(hx * 2.5).toFixed(2)}px ${(hy * 2.5).toFixed(
+            2
+        )}px ${fringeBlur.toFixed(2)}px -1px rgba(110,190,255,${fringe.toFixed(
+            3
+        )})`,
+        `inset ${(-hx * 2.5).toFixed(2)}px ${(-hy * 2.5).toFixed(
+            2
+        )}px ${fringeBlur.toFixed(2)}px -1px rgba(255,120,190,${fringe.toFixed(
+            3
+        )})`,
+        `inset 0 0 0 1px rgba(255,255,255,${(0.1 + lit * 0.32).toFixed(3)})`,
+    ].join(", ")
+
+    // The tint is its own layer so the backdrop stays visible through it.
+    const barStyle: React.CSSProperties = {
+        background: "transparent",
+        backdropFilter: backdrop,
+        WebkitBackdropFilter: backdrop,
+        boxShadow,
+    }
+
+    return {
+        barStyle,
+        tint: `linear-gradient(${o.tintAngle}deg, ${o.tintFrom} 0%, ${o.tintTo} 100%)`,
+        tintAlpha: clamp(o.tintOpacity / 100),
+        // Specular band running across the light axis.
+        sheen: `linear-gradient(${sheenAngle.toFixed(
+            1
+        )}deg, rgba(255,255,255,${(lit * 0.75).toFixed(
+            3
+        )}) 0%, rgba(255,255,255,${(lit * 0.16).toFixed(
+            3
+        )}) 34%, rgba(255,255,255,0) 62%)`,
+    }
+}
 
 // vuesax/linear/arrow-left + arrow-right, used when no PNG is supplied.
 function Chevron({
@@ -150,6 +259,18 @@ export const AnnouncementBarView = forwardRef<
         arrowColor = "rgba(255,255,255,0.9)",
         backgroundImg,
         barMaxWidth = 1200,
+        glass = true,
+        lightAngle = -45,
+        lightIntensity = 100,
+        refraction = 100,
+        depth = 100,
+        dispersion = 100,
+        frost = 0,
+        splay = 100,
+        tintFrom = "#ffffff",
+        tintTo = "#000000",
+        tintAngle = 90,
+        tintOpacity = 42,
         copyColor = "rgba(255,255,255,0.9)",
         highlightColor = "#ffffff",
         ctaColor = "#ff3b4d",
@@ -369,8 +490,27 @@ export const AnnouncementBarView = forwardRef<
         []
     )
 
+    const g = glass
+        ? buildGlass({
+              lightAngle,
+              lightIntensity,
+              refraction,
+              depth,
+              dispersion,
+              frost,
+              splay,
+              tintFrom,
+              tintTo,
+              tintAngle,
+              tintOpacity,
+          })
+        : null
+
     const arrowButtonStyle: React.CSSProperties = {
         flex: "0 0 auto",
+        // Above the absolutely-positioned tint and sheen layers.
+        position: "relative",
+        zIndex: 1,
         width: arrowSize,
         height: arrowSize,
         padding: 0,
@@ -449,11 +589,30 @@ export const AnnouncementBarView = forwardRef<
                     boxSizing: "border-box",
                     overflow: "hidden",
                     fontFamily: FONT_STACK,
-                    // Fallback sheen; the exported Figma fill overrides it.
-                    background:
-                        "linear-gradient(90deg, #d6d6d6 0%, #ededed 28%, #f4f4f4 50%, #e4e4e4 76%, #cfcfcf 100%)",
+                    ...(g
+                        ? g.barStyle
+                        : {
+                              background:
+                                  "linear-gradient(90deg, #d6d6d6 0%, #ededed 28%, #f4f4f4 50%, #e4e4e4 76%, #cfcfcf 100%)",
+                          }),
                 }}
             >
+                {/* Gradient tint — the FFFFFF→000000 fill, kept translucent
+                    so the blurred backdrop still reads through it. */}
+                {g ? (
+                    <div
+                        aria-hidden="true"
+                        style={{
+                            position: "absolute",
+                            inset: 0,
+                            borderRadius: BAR_RADIUS,
+                            background: g.tint,
+                            opacity: g.tintAlpha,
+                            pointerEvents: "none",
+                        }}
+                    />
+                ) : null}
+
                 {backgroundImg ? (
                     <img
                         src={backgroundImg}
@@ -467,6 +626,21 @@ export const AnnouncementBarView = forwardRef<
                             objectFit: "cover",
                             borderRadius: BAR_RADIUS,
                             pointerEvents: "none",
+                        }}
+                    />
+                ) : null}
+
+                {/* Specular sheen across the light axis */}
+                {g ? (
+                    <div
+                        aria-hidden="true"
+                        style={{
+                            position: "absolute",
+                            inset: 0,
+                            borderRadius: BAR_RADIUS,
+                            background: g.sheen,
+                            pointerEvents: "none",
+                            mixBlendMode: "screen",
                         }}
                     />
                 ) : null}
@@ -814,10 +988,116 @@ export const announcementBarControls = {
         description: "Used by the built-in chevron only.",
         hidden: (p: AnnouncementBarProps) => !p.showArrows,
     },
+    glass: {
+        type: ControlType.Boolean,
+        title: "Glass",
+        defaultValue: true,
+        enabledTitle: "On",
+        disabledTitle: "Off",
+        description:
+            "CSS stand-in for Figma's Glass material — same parameter names and 0–100 ranges.",
+    },
+    lightAngle: {
+        type: ControlType.Number,
+        title: "Light",
+        defaultValue: -45,
+        min: -180,
+        max: 180,
+        step: 1,
+        unit: "°",
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    lightIntensity: {
+        type: ControlType.Number,
+        title: "Intensity",
+        defaultValue: 100,
+        min: 0,
+        max: 100,
+        step: 1,
+        unit: "%",
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    refraction: {
+        type: ControlType.Number,
+        title: "Refraction",
+        defaultValue: 100,
+        min: 0,
+        max: 100,
+        step: 1,
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    depth: {
+        type: ControlType.Number,
+        title: "Depth",
+        defaultValue: 100,
+        min: 0,
+        max: 100,
+        step: 1,
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    dispersion: {
+        type: ControlType.Number,
+        title: "Dispersion",
+        defaultValue: 100,
+        min: 0,
+        max: 100,
+        step: 1,
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    frost: {
+        type: ControlType.Number,
+        title: "Frost",
+        defaultValue: 0,
+        min: 0,
+        max: 100,
+        step: 1,
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    splay: {
+        type: ControlType.Number,
+        title: "Splay",
+        defaultValue: 100,
+        min: 0,
+        max: 100,
+        step: 1,
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    tintFrom: {
+        type: ControlType.Color,
+        title: "Tint From",
+        defaultValue: "#ffffff",
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    tintTo: {
+        type: ControlType.Color,
+        title: "Tint To",
+        defaultValue: "#000000",
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    tintAngle: {
+        type: ControlType.Number,
+        title: "Tint Angle",
+        defaultValue: 90,
+        min: 0,
+        max: 360,
+        step: 1,
+        unit: "°",
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
+    tintOpacity: {
+        type: ControlType.Number,
+        title: "Tint Opacity",
+        defaultValue: 42,
+        min: 0,
+        max: 100,
+        step: 1,
+        unit: "%",
+        hidden: (p: AnnouncementBarProps) => !p.glass,
+    },
     backgroundImg: {
         type: ControlType.Image,
         title: "Bar Background",
-        description: "Export the pill fill from Figma and drop it here.",
+        description: "Optional image, layered over the glass.",
     },
     barMaxWidth: {
         type: ControlType.Number,
